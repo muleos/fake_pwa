@@ -4,7 +4,7 @@ HarmonyOS 网页套壳应用：一个可以"假装"成任意网站 App 的壳子
 
 - 包名：`com.hmos.pwa`
 - 应用名：假装PWA
-- 当前版本：v1.0.1 (100002)
+- 当前版本：v1.0.2 (100003)
 - 兼容版本：compatibleSdkVersion `6.0.0(20)`
 
 ## 功能
@@ -22,7 +22,9 @@ HarmonyOS 网页套壳应用：一个可以"假装"成任意网站 App 的壳子
 - **强制深色模式**：开关打开时网页深色跟随系统深浅色；
 - **下拉灵敏度**、**底栏抬高**（0-30vp）；
 - **清除缓存**（7 天未使用启动时也自动清）、**返回首页**、下拉刷新；
-- **更换图标**：查询华为图标管理服务的动态图标列表，点选即切换应用桌面图标，支持恢复默认（fake_pwa 特性保留）。
+- **更换图标（双通道）**：
+  - **上传自定义图标**：图库选图 → 拷贝沙箱 → 持久化 → 应用内展示（WeiboPura 封面更换同构；鸿蒙平台限制：任意上传图片无法直接设为桌面图标，仅应用内生效）；
+  - **AGC 动态图标**：查询华为图标管理服务的动态图标列表，点选即切换桌面图标，支持恢复默认（需 AGC 创建过审，仅真机）。
 
 ### 壳能力（soutu_ohos 1:1）
 - 沉浸式全屏 + 状态栏/小白条避让，系统栏背景取页面采样色（DOM 探针经 console 上报）；
@@ -65,6 +67,7 @@ entry/src/main/ets/
   services/ImageResourceSniffer.ets       页面图片资源嗅探缓存（soutu 同构）
   services/WebImageSaver.ets              取图/图库直存/剪贴板/分享（soutu 同构）
   services/DynamicAppIconService.ets      AGC 动态图标查询/切换/恢复（aira 同构）
+  services/CustomIconService.ets          自定义图标上传：图库选图→沙箱持久化→file:// 展示（WeiboPura 同构）
   component/DownloadConfirmDialog.ets     下载确认弹窗（soutu 同构）
   delegate/IWebDownloadFile.ets           下载委托抽象（soutu 同构）
   delegate/WebDownloadFileImpl.ets        下载委托实现（soutu 同构）
@@ -75,5 +78,6 @@ entry/src/main/ets/
 
 ## 版本历史
 
+- **v1.0.2 (100003)**：更换图标支持上传自定义图标（图库选图→沙箱持久化→应用内展示，WeiboPura 封面更换同构）+ AGC 动态图标双通道；应用图标重绘：收藏 app 同款华为蓝渐变背景 + 白色网络地球（分层资源 1024px，前景/背景/startIcon 同步更新）。
 - **v1.0.1 (100002)**：壳能力对齐 soutu_ohos 1:1（下载/取图/长按菜单/沉浸取色/UA/全屏开关等全量移植）；首页改为纯空白底（浅色白/深色黑），移除桌面壁纸读取；设置面板全量重做。
 - **v1.0.0 (100001)**：首版。分层壳 + 壁纸尽力读取 + 简化设置面板 + AGC 换图标。

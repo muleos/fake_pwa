@@ -34,6 +34,7 @@ import { WEB_CHROME_SCRIPT } from '../utiles/WebChromeScript'
 import { WebImageSaver } from '../services/WebImageSaver'
 import { ImageResourceSniffer } from '../services/ImageResourceSniffer'
 import { DynamicAppIconService } from '../services/DynamicAppIconService';
+import { CustomIconService } from '../services/CustomIconService';
 import { http } from '@kit.NetworkKit';
 import { photoAccessHelper } from '@kit.MediaLibraryKit';
 import { appInfoManager } from '@kit.AppGalleryKit';
@@ -147,6 +148,9 @@ struct Index {
   @State iconStatus: string = '';
   @State currentIconId: string = '';
   private iconService: DynamicAppIconService = new DynamicAppIconService();
+  // ===== 自定义图标（WeiboPura 封面更换同构：上传图片→沙箱持久化→file:// 展示） =====
+  @State customIconPath: string = '';
+  private customIconService: CustomIconService = new CustomIconService();
 
   async setSystemFull(is_full: string, is_hidestatus: string, is_hidebar: string) {
     let windowClass = await window.getLastWindow(context_index)
@@ -356,6 +360,8 @@ struct Index {
       this.setSystemFull(this.isFull, this.isHidestatus, this.isHidebar);
       this.computeHomeNavArea();
     }, 50);
+    // 自定义图标路径回填
+    this.customIconPath = await this.customIconService.getCustomIconPath();
   }
 
   aboutToDisappear(): void {
@@ -1126,11 +1132,11 @@ struct Index {
               .fontColor($r('app.color.dialog_text'))
               .width("35%")
               .height(32)
-            Text(this.currentIconId === '' ? '默认' : this.currentIconId)
-              .fontSize(12)
-              .fontColor($r('app.color.dialog_text_secondary'))
-              .layoutWeight(1)
-              .textAlign(TextAlign.End)
+          Text(this.customIconPath !== '' ? '自定义' : (this.currentIconId === '' ? '默认' : this.currentIconId))
+            .fontSize(12)
+            .fontColor($r('app.color.dialog_text_secondary'))
+            .layoutWeight(1)
+            .textAlign(TextAlign.End)
             Text('›')
               .fontSize(18)
               .fontColor($r('app.color.dialog_text_secondary'))
@@ -1145,7 +1151,7 @@ struct Index {
             .height(30)
 
           Row() {
-            Text("Version:1.0.1")
+            Text("Version:1.0.2")
               .fontColor($r('app.color.dialog_text_secondary'))
               .width('100%')
               .textAlign(TextAlign.Center)
@@ -2248,6 +2254,27 @@ struct Index {
 
   // ==================== 换图标（AGC 图标管理服务） ====================
 
+  /** 上传自定义图标（WeiboPura 封面更换同构）：图库选图 → 拷贝沙箱 → 持久化 → 预览刷新 */
+  private async pickCustomIcon(): Promise<void> {
+    try {
+      const path: string = await this.customIconService
+        .pickAndSave(getContext(this) as common.UIAbilityContext);
+      if (path === '') {
+        return; // 用户取消
+      }
+      this.customIconPath = path;
+      promptAction.showToast({ message: '自定义图标已保存（应用内展示）' });
+    } catch (err) {
+      promptAction.showToast({ message: '上传失败，请重试' });
+    }
+  }
+
+  private async removeCustomIcon(): Promise<void> {
+    await this.customIconService.clearCustomIcon();
+    this.customIconPath = '';
+    promptAction.showToast({ message: '已恢复默认图标展示' });
+  }
+
   private openIconPanel(): void {
     this.showIcons = true;
     this.refreshIcons();
@@ -2330,6 +2357,68 @@ struct Index {
         }
         .width('100%')
         Row().height(12)
+        Row() {
+          Text('应用图标预览')
+            .fontSize(14)
+            .fontColor($r('app.color.dialog_text'))
+            .layoutWeight(1)
+          if (this.customIconPath !== '') {
+            Image(this.customIconPath.startsWith('file://') ? this.customIconPath : `file://${this.customIconPath}`)
+              .width(44)
+              .height(44)
+              .borderRadius(10)
+              .objectFit(ImageFit.Cover)
+              .alt($r('app.media.startIcon'))
+          } else {
+            Image($r('app.media.startIcon'))
+              .width(44)
+              .height(44)
+              .borderRadius(10)
+          }
+        }
+        .width('100%')
+        .height(56)
+
+        Row() {
+          Button('上传自定义图标')
+            .height(34)
+            .type(ButtonType.Capsule)
+            .fontSize(13)
+            .layoutWeight(1)
+            .backgroundColor($r('app.color.accent_blue'))
+            .fontColor(Color.White)
+            .onClick(() => {
+              this.pickCustomIcon();
+            })
+          Row().width(10)
+          Button('移除')
+            .height(34)
+            .type(ButtonType.Capsule)
+            .fontSize(13)
+            .width(88)
+            .backgroundColor($r('app.color.dialog_divider'))
+            .fontColor($r('app.color.dialog_text'))
+            .opacity(this.customIconPath !== '' ? 1 : 0.4)
+            .onClick(() => {
+              if (this.customIconPath !== '') {
+                this.removeCustomIcon();
+              }
+            })
+        }
+        .width('100%')
+        Row().height(4)
+        Text('从图库选择图片作为应用图标（应用内展示，WeiboPura 封面更换同构）。\n桌面图标的运行时更换属平台受限能力：仅支持 AppGallery Connect「图标管理」预创建的动态图标（见下方列表），无法把任意上传图片直接设为桌面图标。')
+          .fontSize(11)
+          .fontColor($r('app.color.dialog_text_secondary'))
+
+        Row().height(6)
+        Divider().color($r('app.color.dialog_divider')).strokeWidth(1)
+        Row().height(6)
+        Text('AGC 动态图标（桌面图标更换）')
+          .fontSize(13)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.dialog_text'))
+        Row().height(4)
         if (this.iconLoading) {
           Column() {
             LoadingProgress()
