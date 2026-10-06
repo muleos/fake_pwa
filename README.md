@@ -1,22 +1,37 @@
 # 假装PWA
 
-HarmonyOS 网页套壳应用：一个可以"假装"成任意网站 App 的壳子。基于 soutu_ohos 壳工程同构演化。
+HarmonyOS 网页套壳应用：一个可以"假装"成任意网站 App 的壳子。**壳能力与 [soutu_ohos](https://github.com/muleos/soutu_ohos) 1:1 同构**，差异仅在：首页不内置任何网址，由用户手动填写。
 
 - 包名：`com.hmos.pwa`
 - 应用名：假装PWA
-- 当前版本：v1.0.0 (100001)
+- 当前版本：v1.0.1 (100002)
 - 兼容版本：compatibleSdkVersion `6.0.0(20)`
 
 ## 功能
 
 ### 首页（默认为空）
-- 首页显示**桌面壁纸**（能读取到时全屏铺底）；
-- 读取失败（平台受限，见下）则显示空白：浅色模式白色、深色模式黑色；
-- 右下角半透明齿轮按钮进入设置。
+- 首页地址默认**空**，用户在设置面板手动填写目标网址并保存；
+- **首页为空时显示纯空白底色：浅色模式白色、深色模式黑色（跟随系统深浅色实时切换）**；
+- 空白首页仅右下角一个半透明齿轮按钮进入设置；
+- 保存网址后，整壳即"假装"成该网站 App（WebView 全屏承载，伪装 PWA）。
 
-### 设置
-- **目标网页**：输入网址 → 保存（持久化）/ 打开（进入 WebView 网页层）；
-- **更换图标**：查询华为图标管理服务的动态图标列表，点选即切换应用桌面图标，支持恢复默认。
+### 设置（soutu_ohos 壳同款全量能力）
+- **首页地址**：输入网址 → 保存（自动补 `https://` 前缀，立即生效）；
+- **UA 切换**：手机(安卓) / 电脑 / 自定义；
+- **横屏禁止刷新**、**全屏模式**、**显示状态栏**、**显示底部白条**；
+- **强制深色模式**：开关打开时网页深色跟随系统深浅色；
+- **下拉灵敏度**、**底栏抬高**（0-30vp）；
+- **清除缓存**（7 天未使用启动时也自动清）、**返回首页**、下拉刷新；
+- **更换图标**：查询华为图标管理服务的动态图标列表，点选即切换应用桌面图标，支持恢复默认（fake_pwa 特性保留）。
+
+### 壳能力（soutu_ohos 1:1）
+- 沉浸式全屏 + 状态栏/小白条避让，系统栏背景取页面采样色（DOM 探针经 console 上报）；
+- 长按图片/视频自绘上下文菜单：保存图片（安全控件直存系统图库）/ 复制图片 / 分享图片 / 复制链接 / 其他应用打开；
+- 统一取图通道：资源嗅探缓存 → 默认参数 GET → 多策略 Referer 矩阵 → 页面内 fetch（分片桥）→ WebView 网络栈下载；
+- 文件下载确认弹窗（进度条，SaveButton 授权保存）；图片类下载自动改走图库保存（魔数嗅探兜底）；
+- `<input type=file>` 拉起系统图库选图；外部 scheme（深链）交系统分发；
+- Cookie 登录：粘贴 Cookie 串写入首页域 CookieStore（UI 暂隐藏，逻辑保留，域名跟随首页 URL）；
+- 深浅色双源判定（配置色模式优先，mediaquery 兜底）；网页双指强制缩放；MixedMode 兼容。
 
 ### 应用分身
 `AppScope/app.json5` 中配置：
@@ -28,7 +43,7 @@ HarmonyOS 网页套壳应用：一个可以"假装"成任意网站 App 的壳子
 }
 ```
 
-> 注：官方文档（OpenHarmony app.json5 配置）标注 appClone 模式 `maxCount` 范围 1~5（multiInstance 模式才到 10）；打包工具不做范围校验。若目标系统按 5 截断，属平台限制，此处配置值仍保留 10。
+> 注：官方文档（OpenHarmony app.json5 配置）标注 appClone 模式 `maxCount` 范围 1~5（multiInstance 模式才到 10）；DevEco 本地 hvigor schema 校验上限为 5，本地编译需临时改 5。若目标系统按 5 截断，属平台限制，此处配置值仍保留 10。
 
 ## 换图标的前置条件（重要）
 
@@ -40,30 +55,25 @@ HarmonyOS 网页套壳应用：一个可以"假装"成任意网站 App 的壳子
 
 典型用法：给每个常用网站在 AGC 上传对应图标（iconId 即网站名），每个应用分身选择不同网页与图标，即可"假装"出多个网站 App。
 
-## 桌面壁纸的平台限制
-
-- `wallpaper.getPixelMap/getImage` 均为 `@systemapi`（三方不可见、运行时 202 拦截）；
-- 公开可编译的读取入口仅剩 `wallpaper.getFile()`（API 8，已 deprecated），需 `ohos.permission.GET_WALLPAPER`（system_basic，三方拿不到授权）。
-
-因此代码按"尽力读取"实现（`services/WallpaperService.ets`）：任何一步失败即回退空白底（浅色白/深色黑）。若后续系统开放壁纸读取，无需改动。
-
 ## 工程结构
 
 ```
 AppScope/app.json5                        包名/版本/分身(multiAppMode)
 entry/src/main/ets/
-  entryability/EntryAbility.ets           入口：内核预热+目标页预连接、深浅色事件
-  model/StorageService.ets                目标网页持久化
-  services/WallpaperService.ets           桌面壁纸尽力读取（失败回退空白）
+  entryability/EntryAbility.ets           入口：内核预热+首页预连接、深浅色事件
+  model/StorageService.ets                首页地址/UA/开关/Cookie 等持久化（soutu 同构）
+  services/ImageResourceSniffer.ets       页面图片资源嗅探缓存（soutu 同构）
+  services/WebImageSaver.ets              取图/图库直存/剪贴板/分享（soutu 同构）
   services/DynamicAppIconService.ets      AGC 动态图标查询/切换/恢复（aira 同构）
+  component/DownloadConfirmDialog.ets     下载确认弹窗（soutu 同构）
+  delegate/IWebDownloadFile.ets           下载委托抽象（soutu 同构）
+  delegate/WebDownloadFileImpl.ets        下载委托实现（soutu 同构）
+  utiles/WebChromeScript.ets              页面注入脚本：取色探针+取图桥（soutu 同构）
   utiles/EmitterUtil.ets                  事件工具
-  pages/Index.ets                         单页分层壳：首页(壁纸/空白)+网页层+设置+换图标
+  pages/Index.ets                         空白首页(白/黑跟随深浅色)+网页层+设置+换图标
 ```
 
-## 壳能力（继承 soutu_ohos）
+## 版本历史
 
-- 沉浸式全屏 + 安全区避让（网页层避状态栏）
-- 深浅色双源判定（配置色模式优先，mediaquery 兜底）
-- 默认安卓手机 UA；外部 scheme 交系统分发（openLink → Want 兜底）
-- `<input type=file>` 拉起系统图库选图
-- 返回键层级处理：图标面板 → 设置面板 → 网页历史 → 关网页层 → 退出
+- **v1.0.1 (100002)**：壳能力对齐 soutu_ohos 1:1（下载/取图/长按菜单/沉浸取色/UA/全屏开关等全量移植）；首页改为纯空白底（浅色白/深色黑），移除桌面壁纸读取；设置面板全量重做。
+- **v1.0.0 (100001)**：首版。分层壳 + 壁纸尽力读取 + 简化设置面板 + AGC 换图标。

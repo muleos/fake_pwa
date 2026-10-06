@@ -31,6 +31,8 @@
     {
       "name": "accent_blue",
       "value": "#3D7DFF"
-    }
+    },
+    {"name": "ctx_menu_bg", "value": "#26282E"},
+    {"name": "ctx_divider", "value": "#3A3D43"}
   ]
 }
