@@ -151,6 +151,8 @@ struct Index {
   // ===== 自定义图标（WeiboPura 封面更换同构：上传图片→沙箱持久化→file:// 展示） =====
   @State customIconPath: string = '';
   private customIconService: CustomIconService = new CustomIconService();
+  // ===== 预置静态图标样式（应用内全表面生效；桌面图标更换走 AGC 动态图标或 tools/set_app_icon.py 重打包） =====
+  @State iconStyle: string = 'blue';
 
   async setSystemFull(is_full: string, is_hidestatus: string, is_hidebar: string) {
     let windowClass = await window.getLastWindow(context_index)
@@ -362,6 +364,12 @@ struct Index {
     }, 50);
     // 自定义图标路径回填
     this.customIconPath = await this.customIconService.getCustomIconPath();
+    // 预置图标样式回填
+    try {
+      const pref = preferences.getPreferencesSync(context_index, { name: 'app_config' });
+      this.iconStyle = String(pref.getSync('icon_style', 'blue'));
+    } catch (err) {
+    }
   }
 
   aboutToDisappear(): void {
@@ -1132,7 +1140,8 @@ struct Index {
               .fontColor($r('app.color.dialog_text'))
               .width("35%")
               .height(32)
-          Text(this.customIconPath !== '' ? '自定义' : (this.currentIconId === '' ? '默认' : this.currentIconId))
+          Text(this.customIconPath !== '' ? '自定义'
+            : (this.currentIconId !== '' ? this.currentIconId : this.styleLabel(this.iconStyle)))
             .fontSize(12)
             .fontColor($r('app.color.dialog_text_secondary'))
             .layoutWeight(1)
@@ -2275,6 +2284,54 @@ struct Index {
     promptAction.showToast({ message: '已恢复默认图标展示' });
   }
 
+  // ===== 预置静态图标样式 =====
+
+  /** 样式 id → 预览图资源 */
+  private stylePreviewRes(style: string): Resource {
+    if (style === 'black') {
+      return $r('app.media.icon_style_black');
+    }
+    if (style === 'green') {
+      return $r('app.media.icon_style_green');
+    }
+    if (style === 'orange') {
+      return $r('app.media.icon_style_orange');
+    }
+    if (style === 'purple') {
+      return $r('app.media.icon_style_purple');
+    }
+    return $r('app.media.icon_style_blue');
+  }
+
+  /** 样式 id → 显示名 */
+  private styleLabel(style: string): string {
+    if (style === 'black') {
+      return '曜石黑';
+    }
+    if (style === 'green') {
+      return '翡翠绿';
+    }
+    if (style === 'orange') {
+      return '珊瑚橙';
+    }
+    if (style === 'purple') {
+      return '星紫';
+    }
+    return '收藏蓝';
+  }
+
+  /** 应用内切换预置样式：持久化 + 立即生效（设置行/面板预览）。桌面图标需 AGC 或重打包。 */
+  private selectStyle(style: string): void {
+    this.iconStyle = style;
+    try {
+      const pref = preferences.getPreferencesSync(context_index, { name: 'app_config' });
+      pref.putSync('icon_style', style);
+      pref.flushSync();
+    } catch (err) {
+    }
+    promptAction.showToast({ message: '图标样式：' + this.styleLabel(style) });
+  }
+
   private openIconPanel(): void {
     this.showIcons = true;
     this.refreshIcons();
@@ -2370,7 +2427,7 @@ struct Index {
               .objectFit(ImageFit.Cover)
               .alt($r('app.media.startIcon'))
           } else {
-            Image($r('app.media.startIcon'))
+            Image(this.stylePreviewRes(this.iconStyle))
               .width(44)
               .height(44)
               .borderRadius(10)
@@ -2378,6 +2435,39 @@ struct Index {
         }
         .width('100%')
         .height(56)
+
+        Row().height(4)
+        Text('预置图标样式')
+          .fontSize(13)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.dialog_text'))
+        Row().height(8)
+        Row({ space: 8 }) {
+          ForEach(['blue', 'black', 'green', 'orange', 'purple'], (s: string) => {
+            Column() {
+              Image(this.stylePreviewRes(s))
+                .width(44)
+                .height(44)
+                .borderRadius(10)
+                .border({
+                  width: (this.iconStyle === s && this.customIconPath === '') ? 2 : 0,
+                  color: $r('app.color.accent_blue')
+                })
+              Row().height(4)
+              Text(this.styleLabel(s))
+                .fontSize(10)
+                .maxLines(1)
+                .fontColor((this.iconStyle === s && this.customIconPath === '')
+                  ? $r('app.color.accent_blue') : $r('app.color.dialog_text_secondary'))
+            }
+            .layoutWeight(1)
+            .onClick(() => {
+              this.selectStyle(s);
+            })
+          }, (s: string) => s)
+        }
+        .width('100%')
+        Row().height(10)
 
         Row() {
           Button('上传自定义图标')
@@ -2407,7 +2497,7 @@ struct Index {
         }
         .width('100%')
         Row().height(4)
-        Text('从图库选择图片作为应用图标（应用内展示，WeiboPura 封面更换同构）。\n桌面图标的运行时更换属平台受限能力：仅支持 AppGallery Connect「图标管理」预创建的动态图标（见下方列表），无法把任意上传图片直接设为桌面图标。')
+        Text('预置样式：应用内图标立即切换并记忆。\n桌面图标更换两条通道：① 应用市场分发 + AppGallery Connect「图标管理」（下方列表，真机可切）；② 安装前重打包——仓库 tools/set_app_icon.py 可选预置样式或任意图片（如目标网站 logo）重新生成 hap，安装后桌面图标即为目标样式。')
           .fontSize(11)
           .fontColor($r('app.color.dialog_text_secondary'))
 

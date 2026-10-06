@@ -2,8 +2,8 @@
   "app": {
     "bundleName": "com.hmos.pwa",
     "vendor": "muleos",
-    "versionCode": 100003,
-    "versionName": "1.0.2",
+    "versionCode": 100004,
+    "versionName": "1.0.3",
     "icon": "$media:app_icon",
     "label": "$string:app_name",
     "multiAppMode": {
