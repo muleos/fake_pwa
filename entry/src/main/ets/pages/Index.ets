@@ -33,11 +33,9 @@ import { EmitterUtil } from '../utiles/EmitterUtil'
 import { WEB_CHROME_SCRIPT } from '../utiles/WebChromeScript'
 import { WebImageSaver } from '../services/WebImageSaver'
 import { ImageResourceSniffer } from '../services/ImageResourceSniffer'
-import { DynamicAppIconService } from '../services/DynamicAppIconService';
 import { CustomIconService } from '../services/CustomIconService';
 import { http } from '@kit.NetworkKit';
 import { photoAccessHelper } from '@kit.MediaLibraryKit';
-import { appInfoManager } from '@kit.AppGalleryKit';
 import { BusinessError, systemDateTime } from '@kit.BasicServicesKit';
 import { preferences } from '@kit.ArkData';
 import { hilog } from '@kit.PerformanceAnalysisKit';
@@ -142,13 +140,7 @@ struct Index {
   // 无缓存字节时直取来源 URL（nas_nav 1:1：点保存时才单次 GET）
   private pendingSaveUrl: string = '';
   private ctxUrl: string = '';
-  // ===== 换图标面板（AGC 图标管理服务，fake_pwa 特性保留） =====
-  @State iconLoading: boolean = false;
-  @State iconOptions: appInfoManager.DynamicIconInfo[] = [];
-  @State iconStatus: string = '';
-  @State currentIconId: string = '';
-  private iconService: DynamicAppIconService = new DynamicAppIconService();
-  // ===== 自定义图标（WeiboPura 封面更换同构：上传图片→沙箱持久化→file:// 展示） =====
+  // ===== 换图标面板（预置静态样式 + 自定义上传） =====
   @State customIconPath: string = '';
   private customIconService: CustomIconService = new CustomIconService();
   // ===== 预置静态图标样式（应用内全表面生效；桌面图标更换走 AGC 动态图标或 tools/set_app_icon.py 重打包） =====
@@ -1140,8 +1132,7 @@ struct Index {
               .fontColor($r('app.color.dialog_text'))
               .width("35%")
               .height(32)
-          Text(this.customIconPath !== '' ? '自定义'
-            : (this.currentIconId !== '' ? this.currentIconId : this.styleLabel(this.iconStyle)))
+          Text(this.customIconPath !== '' ? '自定义' : this.styleLabel(this.iconStyle))
             .fontSize(12)
             .fontColor($r('app.color.dialog_text_secondary'))
             .layoutWeight(1)
@@ -2320,9 +2311,14 @@ struct Index {
     return '收藏蓝';
   }
 
-  /** 应用内切换预置样式：持久化 + 立即生效（设置行/面板预览）。桌面图标需 AGC 或重打包。 */
+  /** 应用内切换预置样式：持久化 + 立即生效（设置行/面板预览）。 */
   private selectStyle(style: string): void {
     this.iconStyle = style;
+    // 修复：预置样式优先生效——清掉旧的自定义上传图标，避免预览被其遮挡而"看起来没切换"
+    if (this.customIconPath !== '') {
+      this.customIconPath = '';
+      this.customIconService.clearCustomIcon();
+    }
     try {
       const pref = preferences.getPreferencesSync(context_index, { name: 'app_config' });
       pref.putSync('icon_style', style);
@@ -2334,60 +2330,6 @@ struct Index {
 
   private openIconPanel(): void {
     this.showIcons = true;
-    this.refreshIcons();
-  }
-
-  private async refreshIcons(): Promise<void> {
-    this.iconLoading = true;
-    this.iconStatus = '';
-    const res = await this.iconService.queryIcons();
-    this.iconOptions = res.icons;
-    let cur: string = '';
-    for (const o of res.icons) {
-      if (o.enabled) {
-        cur = o.iconId;
-        break;
-      }
-    }
-    this.currentIconId = cur;
-    if (!res.ok) {
-      this.iconStatus = res.message;
-    } else if (res.icons.length === 0) {
-      this.iconStatus = '暂无可选图标：需要先在 AppGallery Connect「图标管理」创建图标并通过审核，审核通过后会自动出现在这里。';
-    }
-    this.iconLoading = false;
-  }
-
-  private async selectIcon(opt: appInfoManager.DynamicIconInfo): Promise<void> {
-    if (opt.enabled || this.iconLoading) {
-      return;
-    }
-    this.iconLoading = true;
-    const res = await this.iconService.selectIcon(opt.iconId);
-    this.iconLoading = false;
-    if (res.ok) {
-      this.currentIconId = opt.iconId;
-      promptAction.showToast({ message: '图标已切换：' + opt.iconId });
-    } else {
-      promptAction.showToast({ message: res.message });
-    }
-    await this.refreshIcons();
-  }
-
-  private async restoreDefaultIcon(): Promise<void> {
-    if (this.iconLoading) {
-      return;
-    }
-    this.iconLoading = true;
-    const res = await this.iconService.restoreDefault();
-    this.iconLoading = false;
-    if (res.ok) {
-      this.currentIconId = '';
-      promptAction.showToast({ message: '已恢复默认图标' });
-    } else {
-      promptAction.showToast({ message: res.message });
-    }
-    await this.refreshIcons();
   }
 
   // ==================== 换图标面板 ====================
@@ -2497,106 +2439,7 @@ struct Index {
         }
         .width('100%')
         Row().height(4)
-        Text('预置样式：应用内图标立即切换并记忆。\n桌面图标更换两条通道：① 应用市场分发 + AppGallery Connect「图标管理」（下方列表，真机可切）；② 安装前重打包——仓库 tools/set_app_icon.py 可选预置样式或任意图片（如目标网站 logo）重新生成 hap，安装后桌面图标即为目标样式。')
-          .fontSize(11)
-          .fontColor($r('app.color.dialog_text_secondary'))
-
-        Row().height(6)
-        Divider().color($r('app.color.dialog_divider')).strokeWidth(1)
-        Row().height(6)
-        Text('AGC 动态图标（桌面图标更换）')
-          .fontSize(13)
-          .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.dialog_text'))
-        Row().height(4)
-        if (this.iconLoading) {
-          Column() {
-            LoadingProgress()
-              .width(36)
-              .height(36)
-              .color($r('app.color.accent_blue'))
-            Row().height(8)
-            Text('正在读取应用图标...')
-              .fontSize(13)
-              .fontColor($r('app.color.dialog_text_secondary'))
-          }
-          .width('100%')
-          .padding({ top: 20, bottom: 20 })
-        } else if (this.iconOptions.length === 0) {
-          Column() {
-            Text(this.iconStatus)
-              .fontSize(13)
-              .fontColor($r('app.color.dialog_text_secondary'))
-            Row().height(12)
-            Button('重新查询')
-              .height(32)
-              .type(ButtonType.Capsule)
-              .fontSize(13)
-              .backgroundColor($r('app.color.dialog_divider'))
-              .fontColor($r('app.color.dialog_text'))
-              .onClick(() => {
-                this.refreshIcons();
-              })
-          }
-          .width('100%')
-          .padding({ top: 12, bottom: 12 })
-        } else {
-          List() {
-            ForEach(this.iconOptions, (opt: appInfoManager.DynamicIconInfo, index: number) => {
-              ListItem() {
-                Row() {
-                  Image(opt.iconUrl)
-                    .width(44)
-                    .height(44)
-                    .borderRadius(10)
-                    .alt($r('app.media.startIcon'))
-                  Text(opt.iconId)
-                    .fontSize(14)
-                    .fontColor($r('app.color.dialog_text'))
-                    .margin({ left: 12 })
-                    .layoutWeight(1)
-                  if (opt.enabled) {
-                    Text('当前')
-                      .fontSize(12)
-                      .fontColor($r('app.color.accent_blue'))
-                  }
-                }
-                .width('100%')
-                .height(60)
-                .onClick(() => {
-                  this.selectIcon(opt);
-                })
-              }
-            }, (opt: appInfoManager.DynamicIconInfo, index: number) => opt.iconId + '_' + index)
-          }
-          .width('100%')
-          .height(240)
-          .divider({ strokeWidth: 1, color: $r('app.color.dialog_divider'), startMargin: 0, endMargin: 0 })
-          .scrollBar(BarState.Off)
-          Row().height(6)
-          Divider().color($r('app.color.dialog_divider')).strokeWidth(1)
-          Row() {
-            Text('恢复默认图标')
-              .fontSize(14)
-              .fontColor($r('app.color.dialog_text'))
-              .layoutWeight(1)
-            Button('恢复')
-              .height(30)
-              .type(ButtonType.Capsule)
-              .fontSize(13)
-              .backgroundColor($r('app.color.dialog_divider'))
-              .fontColor($r('app.color.dialog_text'))
-              .onClick(() => {
-                this.restoreDefaultIcon();
-              })
-          }
-          .width('100%')
-          .height(50)
-        }
-        Row().height(8)
-        Text(this.iconOptions.length === 0 && !this.iconLoading
-          ? '图标由华为应用市场图标管理服务提供（仅真机生效）。'
-          : '切换后桌面图标会由系统更新；如果系统正在使用自定义主题图标，切换可能会失败。')
+        Text('应用内图标立即切换并记忆。\n桌面图标在安装时固化（鸿蒙不提供应用内换桌面图标的接口），更换方式：电脑上执行 python tools/set_app_icon.py --variant 样式 --build（或 --image 任意网站logo）重新打包，安装新 hap 后桌面图标即为目标样式。')
           .fontSize(11)
           .fontColor($r('app.color.dialog_text_secondary'))
       }
