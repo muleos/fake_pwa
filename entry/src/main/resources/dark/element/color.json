@@ -1,0 +1,36 @@
+{
+  "color": [
+    {
+      "name": "start_window_background",
+      "value": "#000000"
+    },
+    {
+      "name": "panel_bg",
+      "value": "#1B1C21"
+    },
+    {
+      "name": "dialog_bg",
+      "value": "#26282E"
+    },
+    {
+      "name": "dialog_text",
+      "value": "#E8EAED"
+    },
+    {
+      "name": "dialog_text_secondary",
+      "value": "#9AA0A6"
+    },
+    {
+      "name": "dialog_divider",
+      "value": "#3A3D43"
+    },
+    {
+      "name": "home_gear_bg",
+      "value": "#CC26282E"
+    },
+    {
+      "name": "accent_blue",
+      "value": "#3D7DFF"
+    }
+  ]
+}
